@@ -149,7 +149,29 @@ class TestAStockQuantSystem(unittest.TestCase):
         self.assertIn("vwap", t0_res)
         self.assertIn("pivots", t0_res)
         self.assertEqual(t0_res["suggested_shares"], 400) # 底仓1000股推荐做T 400股
+        self.assertEqual(t0_res["t_action"], "BUY_T")
         print(f"  -> 日内做T引擎研判正常: 当前偏离={t0_res['bias']:.2f}%, 动作={t0_res['t_action']}, 建议股数={t0_res['suggested_shares']}")
+
+        # 验证尾盘平仓窗口（如 14:40）严禁新开买单，并强制触发 CLOSE_T 平仓提醒
+        m_df_late = m_df.copy()
+        m_df_late.iloc[-1, m_df_late.columns.get_loc('time')] = "14:45"
+        t0_close_res = t0_strategy.analyze_t0(
+            symbol="sh600519",
+            name="贵州茅台",
+            minute_df=m_df_late,
+            quote=mock_quote,
+            holding_shares=1000,
+            entry_price=99.0
+        )
+        self.assertEqual(t0_close_res["t_action"], "CLOSE_T")
+        print(f"  -> 尾盘做T强平机制验证通过: 14:45 触发强制平仓动作={t0_close_res['t_action']}")
+
+        # 验证 14:45 尾盘提醒调度接口连通性
+        remind_res = notification_manager.send_t0_close_reminder([
+            {"symbol": "sh561980", "name": "半导体设备ETF", "shares": 15400, "t0_enabled": True}
+        ])
+        self.assertIsInstance(remind_res, dict)
+        print("  -> 14:45 尾盘强平提醒消息通道分发正常！")
 
     def test_05_online_data_fetcher(self):
         """测试网络实时行情与日K接口连通性"""

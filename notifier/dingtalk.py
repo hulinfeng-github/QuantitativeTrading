@@ -8,7 +8,7 @@ import hashlib
 import base64
 import urllib.parse
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 class DingTalkNotifier:
     def __init__(self, webhook: str = "", secret: str = ""):
@@ -103,7 +103,12 @@ class DingTalkNotifier:
         pivots = t0_data.get("pivots", {})
         reasons_md = "\n".join([f"- {r}" for r in t0_data.get("reasons", [])])
 
-        badge = "⚡ 【A股日内正T·低吸买点】" if action == "BUY_T" else "🎯 【A股日内倒T·高抛卖点】"
+        if action == "BUY_T":
+            badge = "⚡ 【A股日内正T·低吸买点】"
+        elif action == "SELL_T":
+            badge = "🎯 【A股日内倒T·高抛卖点】"
+        else:
+            badge = "⏰ 【A股尾盘做T·强制平仓提醒】"
 
         text = f"""### {badge} {name} ({code})
 > **分时现价**：`{price:.2f}元` | **均价线(VWAP)**：`{vwap:.2f}元` | **偏离度**：`{bias:+.2f}%`
@@ -120,9 +125,37 @@ class DingTalkNotifier:
 - 压力位 R1/R2: `{pivots.get('r1')}元 / {pivots.get('r2')}元`
 - 支撑位 S1/S2: `{pivots.get('s1')}元 / {pivots.get('s2')}元`
 
-#### 💡 做T触发依据
+#### 💡 研判依据与纪律
 {reasons_md}
 
 > ⚠️ *重要提示：A股执行T+1，请务必于当日14:50前完成等量对冲平仓，严格保持总持股数量不变！*
 """
         return self.send_markdown(title=f"【日内做T】{name} 触发{action}", text=text)
+
+    def send_t0_close_reminder(self, holdings: List[Dict[str, Any]]) -> bool:
+        """发送 A股 14:45 尾盘做T强制平仓与对冲核对提醒卡片"""
+        rows = []
+        for h in holdings:
+            sym = h.get("symbol", "").replace("sh", "").replace("sz", "")
+            name = h.get("name", "")
+            shares = int(h.get("shares", 0))
+            t_shares = int((shares * 0.4) // 100) * 100
+            rows.append(f"- **{name} ({sym})**：底仓 `{shares}股` | 建议平仓对冲 `{t_shares}股`")
+
+        stocks_md = "\n".join(rows) if rows else "- 暂无持仓底仓记录"
+        text = f"""### ⏰ 【A股尾盘做T·强制平仓提醒】(14:45)
+> **距离今日收盘仅剩 15 分钟**，请务必核对今日日内做T底仓是否已等量平仓！
+
+---
+#### 📋 待核对做T标的底仓清单
+{stocks_md}
+
+#### ⚠️ 交易纪律底线 (严格执行 T+1 对冲)
+1. **正T（先买后卖者）**：若您今日盘中曾低吸买入对冲股数，**请务必在 14:50 前按现价卖出等量老底仓**；
+2. **倒T（先卖后买者）**：若您今日早盘曾高抛卖出底仓，**请务必在 14:50 前按现价买回等量股份**；
+3. **收盘总股数必须与昨日持平**：绝不可将日内做T单留仓过夜变相加仓，切勿因贪恋几个价位造成被动套牢！
+
+> *距离集合竞价还有 12 分钟，请立即在证券交易软件中核查持仓数量！*
+"""
+        return self.send_markdown(title="【紧急提醒】A股尾盘做T强制平仓对冲 (14:45)", text=text)
+

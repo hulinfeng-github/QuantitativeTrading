@@ -94,9 +94,16 @@ class T0IntradayStrategy:
             if suggested_shares == 0:
                 suggested_shares = 100
 
+        # ----------------- 0. 做T时间窗口严控 -----------------
+        # 规则说明：
+        # - 09:30-09:40：早盘开盘脉冲剧烈，容易虚假突破，禁止开仓
+        # - 14:15 之后：距离收盘仅剩45分钟，剩余反弹/回踩时间严重不足，严禁新开任何BUY_T/SELL_T做T单！
+        # - 14:35-14:55：进入尾盘安全平仓窗口，主动提示对冲平仓
+        can_open_new_t = "09:40" <= curr_time <= "14:15"
+
         # ----------------- 1. 正T信号检测（先买后卖，低吸高抛） -----------------
-        # 条件：负偏离大、触及支撑S1/S2、低位止跌拐头
-        if bias <= self.bias_buy_threshold or (price <= pivots['s1'] and bias < -0.8):
+        # 条件：时间在14:15前、负偏离大、触及支撑S1/S2、低位止跌拐头
+        if can_open_new_t and (bias <= self.bias_buy_threshold or (price <= pivots['s1'] and bias < -0.8)):
             confidence += 40
             reasons.append(f"价格深度负偏离均线VWAP({vwap:.2f}元)，偏离度达到 {bias:.2f}% (超买超卖负极值)")
             
@@ -114,8 +121,8 @@ class T0IntradayStrategy:
                 t_type = "正T (先低吸买入，冲高后卖出等量底仓)"
 
         # ----------------- 2. 倒T信号检测（先卖后买，高抛低吸） -----------------
-        # 条件：早盘或盘中脉冲急拉、正偏离大、触及阻力R1/R2、高位滞涨
-        elif bias >= self.bias_sell_threshold or (price >= pivots['r1'] and bias > 1.0):
+        # 条件：时间在14:15前、早盘或盘中脉冲急拉、正偏离大、触及阻力R1/R2、高位滞涨
+        elif can_open_new_t and (bias >= self.bias_sell_threshold or (price >= pivots['r1'] and bias > 1.0)):
             confidence += 40
             reasons.append(f"盘中脉冲急拉，偏离分时均线VWAP({vwap:.2f}元)达 {bias:.2f}%，短线透支")
 
@@ -132,10 +139,16 @@ class T0IntradayStrategy:
                 t_action = "SELL_T"
                 t_type = "倒T (先高抛卖出部分底仓，回踩后低位买回)"
 
-        # ----------------- 3. 尾盘安全平仓提示（14:35 - 14:55） -----------------
-        if "14:35" <= curr_time <= "14:55":
-            if t_action == "NONE":
-                reasons.append("临近尾盘，日内做T窗口即将关闭，请核实今日做T单是否已等量平仓")
+        # ----------------- 3. 尾盘安全强制平仓窗口（14:35 - 14:55） -----------------
+        elif "14:35" <= curr_time <= "14:55" and holding_shares >= 100:
+            t_action = "CLOSE_T"
+            t_type = "尾盘平仓 (今日做T对冲平仓窗口)"
+            confidence = 90
+            reasons.append(f"当前时间已到达 {curr_time}，临近收盘强制平仓窗口！")
+            reasons.append("为遵守A股T+1纪律，防止做T变套牢，请于14:50前完成等量对冲平仓，严格保持收盘持股数不变！")
+
+        elif not can_open_new_t and curr_time > "14:15":
+            reasons.append(f"当前时间已过 14:15 (当前 {curr_time})，做T窗口关闭，不再触发新开仓以规避尾盘无法平仓风险。")
 
         # 计算做T目标位与止损位
         target_price = price

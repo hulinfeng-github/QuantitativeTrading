@@ -3,7 +3,7 @@
 支持：PushPlus(推送加)、Server酱(ServerChan)、企业微信机器人(WeCom)
 """
 import requests
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 class WeChatNotifier:
     def __init__(self, provider: str = "pushplus", token: str = ""):
@@ -79,8 +79,14 @@ class WeChatNotifier:
         spread = t0_data.get("expected_spread_pct", 0.0)
         reasons_text = "\n".join([f"• {r}" for r in t0_data.get("reasons", [])])
 
-        badge = "⚡ 【A股日内正T·低吸买点】" if action == "BUY_T" else "🎯 【A股日内倒T·高抛卖点】"
-        title = f"【日内做T】{name}({code}) 现价{price:.2f}元 (偏离均线{bias:+.1f}%)"
+        if action == "BUY_T":
+            badge = "⚡ 【A股日内正T·低吸买点】"
+        elif action == "SELL_T":
+            badge = "🎯 【A股日内倒T·高抛卖点】"
+        else:
+            badge = "⏰ 【A股尾盘做T·强制平仓提醒】"
+
+        title = f"【日内做T】{name}({code}) {action} 现价{price:.2f}元"
 
         content = f"""### {badge} {name} ({code})
 - **分时现价**：{price:.2f} 元
@@ -89,11 +95,43 @@ class WeChatNotifier:
 - **建议做T股数**：{shares} 股 (利用已有底仓对冲)
 - **目标对冲平仓价**：{target:.2f} 元 (预期做T差价: +{spread}%)
 
-#### 研判理由：
+#### 研判理由与纪律：
 {reasons_text}
 
 ---
-*提示：A股T+1规则，请于当日收盘前完成等量平仓！*
+*提示：A股T+1规则，请于当日14:50前完成等量平仓，保持总持股数不变！*
+"""
+        if self.provider == "pushplus":
+            return self._send_pushplus(title, content)
+        elif self.provider == "serverchan":
+            return self._send_serverchan(title, content)
+        elif self.provider == "wecom":
+            return self._send_wecom(title, content)
+        return False
+
+    def send_t0_close_reminder(self, holdings: List[Dict[str, Any]]) -> bool:
+        if not self.token:
+            return False
+        rows = []
+        for h in holdings:
+            sym = h.get("symbol", "").replace("sh", "").replace("sz", "")
+            name = h.get("name", "")
+            shares = int(h.get("shares", 0))
+            t_shares = int((shares * 0.4) // 100) * 100
+            rows.append(f"• {name}({sym})：底仓{shares}股 | 建议平仓对冲{t_shares}股")
+        stocks_text = "\n".join(rows) if rows else "• 暂无底仓记录"
+
+        title = "⏰【A股尾盘做T·强制平仓提醒】(14:45)"
+        content = f"""### ⏰ 尾盘做T强制平仓提醒 (14:45)
+**距离收盘仅剩 15 分钟，请务必核对今日做T单是否已等量平仓！**
+
+#### 待核对持仓标的：
+{stocks_text}
+
+#### 核心纪律铁律：
+1. **正T**：若盘中已低吸买入，请于 14:50 前按现价卖出等量老底仓对冲；
+2. **倒T**：若早盘已高抛卖出，请于 14:50 前按现价低吸买回等量股份；
+3. **收盘总股数必须保持不变**，严禁留单过夜被动加仓！
 """
         if self.provider == "pushplus":
             return self._send_pushplus(title, content)

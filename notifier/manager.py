@@ -86,6 +86,26 @@ class NotificationManager:
             "reasons": t0_data.get("reasons", [])
         }
         self._record_signal(sig_record)
+    def send_t0_close_reminder(self, holdings: List[Dict[str, Any]]) -> Dict[str, bool]:
+        """向微信与钉钉分发 14:45 尾盘做T强制平仓与对冲核对提醒卡片"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        cache_key = f"t0_closeout_reminder_{today}"
+        if cache_key in self._sent_cache:
+            return {"dingtalk": False, "wechat": False, "skipped": True}
+
+        cfg = load_config()
+        results = {"dingtalk": False, "wechat": False, "skipped": False}
+        if cfg.get("dingtalk_enabled") and cfg.get("dingtalk_webhook"):
+            dt = DingTalkNotifier(webhook=cfg.get("dingtalk_webhook"), secret=cfg.get("dingtalk_secret", ""))
+            results["dingtalk"] = dt.send_t0_close_reminder(holdings)
+
+        if cfg.get("wechat_enabled") and cfg.get("wechat_token"):
+            wx = WeChatNotifier(provider=cfg.get("wechat_provider", "pushplus"), token=cfg.get("wechat_token"))
+            results["wechat"] = wx.send_t0_close_reminder(holdings)
+
+        if results["dingtalk"] or results["wechat"]:
+            self._sent_cache.add(cache_key)
+
         return results
 
     def send_markdown_card(self, title: str, content: str) -> Dict[str, bool]:

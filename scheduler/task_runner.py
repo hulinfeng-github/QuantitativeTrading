@@ -129,11 +129,11 @@ class QuantScheduler:
                 print(f"-> 监控触发信号: {name} {res.get('signal_desc')}")
                 notification_manager.send_signal(res)
 
-            # 3. A股 T+1 底仓日内做T监控 (持有底仓时自动研判，且必须在14:45前触发以预留平仓窗口)
+            # 3. A股 T+1 底仓日内做T监控 (持有底仓时自动研判，且严控时间窗口)
             shares = int(item.get('shares', 0) or 0)
             t0_enabled = item.get('t0_enabled', True)
             curr_hm = datetime.now().strftime("%H:%M")
-            if shares >= 100 and t0_enabled and curr_hm <= "14:45":
+            if shares >= 100 and t0_enabled:
                 m_df = data_fetcher.get_minute_data(sym)
                 if m_df is not None and len(m_df) >= 5:
                     t0_res = t0_strategy.analyze_t0(
@@ -144,9 +144,15 @@ class QuantScheduler:
                         holding_shares=shares,
                         entry_price=float(item.get('entry_price', 0.0) or 0.0)
                     )
-                    if t0_res and t0_res.get("t_action") in ["BUY_T", "SELL_T"]:
-                        print(f"-> [日内做T触发] {name}: {t0_res.get('t_type')} 现价{t0_res.get('price')} 偏离{t0_res.get('bias')}%")
-                        notification_manager.send_t0_signal(t0_res)
+                    if t0_res:
+                        action = t0_res.get("t_action")
+                        # 仅在14:15前允许触发新的买/卖做T开仓；14:35后允许触发平仓提醒
+                        if action in ["BUY_T", "SELL_T"] and curr_hm <= "14:15":
+                            print(f"-> [日内做T触发] {name}: {t0_res.get('t_type')} 现价{t0_res.get('price')} 偏离{t0_res.get('bias')}%")
+                            notification_manager.send_t0_signal(t0_res)
+                        elif action == "CLOSE_T":
+                            print(f"-> [日内做T尾盘平仓] {name}: 现价{t0_res.get('price')}")
+                            notification_manager.send_t0_signal(t0_res)
 
     def scan_main_board_market(self, max_stocks: int = 300, auto_notify: bool = False) -> List[Dict[str, Any]]:
         """
@@ -232,6 +238,21 @@ class QuantScheduler:
         threading.Thread(target=run_scan, daemon=True).start()
         return self.latest_scan_results
 
+    def run_t0_closeout_reminder_job(self):
+        """交易日 14:45 自动执行：A股尾盘做T强制平仓与对冲核对提醒"""
+        try:
+            watchlist = self.get_watchlist()
+            t0_holdings = [
+                item for item in watchlist 
+                if int(item.get("shares", 0) or 0) >= 100 and item.get("t0_enabled", True)
+            ]
+            if not t0_holdings:
+                return
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] 触发交易日 14:45 尾盘做T强制平仓核对提醒...")
+            notification_manager.send_t0_close_reminder(t0_holdings)
+        except Exception as e:
+            print(f"尾盘做T强平提醒任务异常: {e}")
+
     def run_daily_review_job(self):
         """执行每日收盘量化复盘与自我迭代优化，并推送到微信/钉钉"""
         try:
@@ -260,7 +281,18 @@ class QuantScheduler:
             replace_existing=True
         )
 
-        # 2. 盘后 15:05 自动全市场主板选股 (周一至周五，自动推送)
+        # 2. 交易日 14:45 准时发送：尾盘做T强制平仓与对冲核对提醒 (周一至周五)
+        self.scheduler.add_job(
+            self.run_t0_closeout_reminder_job,
+            'cron',
+            day_of_week='mon-fri',
+            hour=14,
+            minute=45,
+            id='t0_closeout_reminder',
+            replace_existing=True
+        )
+
+        # 3. 盘后 15:05 自动全市场主板选股 (周一至周五，自动推送)
         self.scheduler.add_job(
             lambda: self.scan_main_board_market(auto_notify=True),
             'cron',
@@ -271,7 +303,7 @@ class QuantScheduler:
             replace_existing=True
         )
 
-        # 3. 盘后 15:20 自动执行全景量化复盘与自迭代 (周一至周五，自动推送复盘卡片)
+        # 4. 盘后 15:20 自动执行全景量化复盘与自迭代 (周一至周五，自动推送复盘卡片)
         self.scheduler.add_job(
             self.run_daily_review_job,
             'cron',
@@ -284,7 +316,7 @@ class QuantScheduler:
 
         self.scheduler.start()
         self.is_running = True
-        print(">>> 定时调度器已成功启动！(含盘中盯盘、15:05选股、15:20收盘复盘与自迭代)")
+        print(">>> 定时调度器已成功启动！(含盘中盯盘、14:45做T强平提醒、15:05选股、15:20收盘复盘与自迭代)")
 
     def stop(self):
         if self.is_running:
