@@ -1,0 +1,23 @@
+[
+  {
+    "symbol": "sh600519",
+    "name": "贵州茅台",
+    "entry_price": 0.0,
+    "shares": 0,
+    "t0_enabled": false
+  },
+  {
+    "symbol": "sz002594",
+    "name": "比亚迪",
+    "entry_price": 0.0,
+    "shares": 0,
+    "t0_enabled": false
+  },
+  {
+    "symbol": "sh512890",
+    "name": "红利低波ETF",
+    "entry_price": 0.0,
+    "shares": 0,
+    "t0_enabled": true
+  }
+]

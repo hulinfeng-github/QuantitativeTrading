@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A股主板顶级量化波段分析系统</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <!-- 顶部导航条 -->
+  <header class="navbar">
+    <div class="nav-brand">
+      <div class="logo-badge">量</div>
+      <div class="brand-text">
+        <h1>A股主板顶级量化系统</h1>
+        <span>修正 RSRS 机构模型 · 多周期量价共振 · 动态波段风控</span>
+      </div>
+    </div>
+    <div class="nav-status">
+      <div class="status-badge">
+        <span id="marketDot" class="dot idle"></span>
+        <span id="marketStatusText">检查市场状态中...</span>
+      </div>
+      <button id="btnStartScan" class="btn btn-primary" onclick="triggerScan()">
+        🚀 立即全市场主板智能选股
+      </button>
+    </div>
+  </header>
+
+  <!-- 主交互容器 -->
+  <main class="main-container">
+    <!-- 标签导航栏 -->
+    <div class="tabs-header">
+      <nav class="tab-nav">
+        <button class="tab-btn active" data-tab="screener">💎 今日波段选股雷达</button>
+        <button class="tab-btn" data-tab="watchlist">📋 盘中自选实时监控</button>
+        <button class="tab-btn" data-tab="t0">🎯 A股T+1日内做T助手</button>
+        <button class="tab-btn" data-tab="diagnose">🔍 单股深度量化诊断</button>
+        <button class="tab-btn" data-tab="signals">🔔 信号与风控流水</button>
+        <button class="tab-btn" data-tab="review">📊 每日复盘与自迭代</button>
+        <button class="tab-btn" data-tab="settings">⚙️ 策略与推送配置</button>
+      </nav>
+      <div id="scanNotice" style="font-size: 12px; color: var(--text-dim);"></div>
+    </div>
+
+    <!-- 1. 选股雷达面板 -->
+    <section id="pane-screener" class="tab-pane" style="display: block;">
+      <div class="card" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.05); border-color: rgba(56, 189, 248, 0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <h3 style="font-size: 15px; color: var(--color-accent); margin-bottom: 4px;">🎯 策略核心机制（适合A股主板 · 非频繁交易）</h3>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">
+              采用光大金工经典的<strong>修正 RSRS (阻力支撑相对强度) 模型</strong>，结合 $Z\text{-score}$ 与决定系数 $R^2$ 捕捉主力大单吸筹和起涨拐点。
+              严格过滤创业板、科创板与ST股，仅聚焦沪深主板高流动性标的；多周期均线共振与自适应 ATR 止损止盈，追求收益风险比最大化。
+            </p>
+          </div>
+        </div>
+      </div>
+      <div id="screenerContainer" class="screener-grid">
+        <!-- 动态填充选股卡片 -->
+      </div>
+    </section>
+
+    <!-- 2. 自选股监控面板 -->
+    <section id="pane-watchlist" class="tab-pane" style="display: none;">
+      <div class="card">
+        <div class="card-title">
+          <span>盘中高频监控池 (自动研判买点、持仓与日内做T)</span>
+          <div style="display: flex; gap: 8px;">
+            <input id="inputAddCode" class="input-text" style="width: 140px; padding: 6px 10px; font-size: 12px;" placeholder="主板代码 如600519" />
+            <input id="inputAddEntryPrice" class="input-text" type="number" step="0.01" style="width: 110px; padding: 6px 10px; font-size: 12px;" placeholder="成本价 (元)" />
+            <input id="inputAddShares" class="input-text" type="number" step="100" style="width: 110px; padding: 6px 10px; font-size: 12px;" placeholder="底仓股数 (股)" />
+            <button class="btn btn-primary" style="padding: 6px 14px;" onclick="addWatchlistStock()">+ 录入自选/持仓</button>
+          </div>
+        </div>
+        <div class="table-container">
+          <table class="custom-table">
+            <thead>
+              <tr>
+                <th>标的名称 / 代码</th>
+                <th>最新现价</th>
+                <th>今日涨跌</th>
+                <th>持仓成本</th>
+                <th>底仓数量</th>
+                <th>浮动盈亏</th>
+                <th>成交金额</th>
+                <th>管理操作</th>
+              </tr>
+            </thead>
+            <tbody id="watchlistTbody">
+              <!-- 动态填充自选股 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2.5 A股 T+1 日内做T助手面板 -->
+    <section id="pane-t0" class="tab-pane" style="display: none;">
+      <div class="card" style="margin-bottom: 20px; background: rgba(245, 158, 11, 0.05); border-color: rgba(245, 158, 11, 0.25);">
+        <h3 style="font-size: 15px; color: var(--color-gold); margin-bottom: 6px;">⚡ A股 T+1 底仓日内做T操作指南与纪律</h3>
+        <p style="font-size: 12px; color: var(--text-muted); line-height: 1.7;">
+          <strong>A股规则特性</strong>：当日买入的股票需下一个交易日才能卖出（T+1）。但如果您持有<strong>底仓</strong>，即可利用底仓在日内变相实现 T+0 降低持仓成本！<br>
+          • <strong>正T（先买后卖）</strong>：当价格深度下杀负偏离均线 VWAP（如 $\le -1.5\%$）且触及日内强支撑位时低吸，冲高后于收盘前卖出原等量底仓，锁定差价利润；<br>
+          • <strong>倒T（先卖后买）</strong>：早盘脉冲急拉正偏离均线 VWAP（如 $\ge +2.0\%$）且高位滞涨时先卖出部分底仓避险，跳水下杀至支撑位等量低吸接回，保住股份摊薄成本；<br>
+          • <strong style="color: #ef4444;">核心风控纪律</strong>：必须在<strong>14:50 之前</strong>完成等量平仓对冲，严禁将做T单变成隔夜加仓！
+        </p>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 15px; font-weight: 700;">📡 持仓标的日内分时均线偏离度与做T雷达</h3>
+        <button class="btn btn-outline" style="padding: 4px 12px; font-size: 12px;" onclick="fetchT0Monitor()">🔄 刷新做T雷达</button>
+      </div>
+
+      <div id="t0Container" class="screener-grid">
+        <!-- 动态填充做T卡片 -->
+      </div>
+    </section>
+
+    <!-- 3. 单股深度量化诊断面板 -->
+    <section id="pane-diagnose" class="tab-pane" style="display: none;">
+      <div class="card diagnose-section">
+        <div class="search-bar">
+          <input id="inputDiagnoseCode" class="input-text" placeholder="输入任意主板股票代码或拼音缩写 (例如: 600519, 000858, 601318)" value="600519" />
+          <button class="btn btn-primary" onclick="runDiagnose()">开始量化诊断</button>
+        </div>
+
+        <!-- 诊断分析明细 -->
+        <div id="diagnoseResultContainer"></div>
+
+        <!-- 专业 K线 与 RSRS 指标图表 -->
+        <div class="chart-wrapper">
+          <canvas id="klineCanvas"></canvas>
+          <canvas id="rsrsCanvas"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 信号历史流水面板 -->
+    <section id="pane-signals" class="tab-pane" style="display: none;">
+      <div class="card">
+        <div class="card-title">买卖决策与预警历史流水</div>
+        <div id="signalsTimeline" class="timeline">
+          <!-- 动态流水 -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 4.5 每日收盘量化复盘与自我迭代面板 -->
+    <section id="pane-review" class="tab-pane" style="display: none;">
+      <div class="card" style="margin-bottom: 20px; background: rgba(56, 189, 248, 0.04); border-color: rgba(56, 189, 248, 0.2);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <h3 style="font-size: 16px; color: var(--color-accent); margin-bottom: 6px;">📊 A股收盘全景量化复盘与自我迭代优化中心</h3>
+            <p style="font-size: 12px; color: var(--text-muted); line-height: 1.7; max-width: 780px;">
+              <strong>闭环自我迭代机制</strong>：每个交易日收盘后（<strong>15:20</strong>）系统自动激活全景复盘。<br>
+              ① <strong>大盘定性</strong>：量化诊断上证指数与沪深300均线结构与量比，划分“强势多头/结构震荡/弱势空头”并测算建议仓位；<br>
+              ② <strong>持仓体检</strong>：全面核算底仓浮盈、乖离度及止损/移动止盈安全边际；<br>
+              ③ <strong>信号追踪</strong>：客观审计近10日 BUY 与做T信号胜率与平均收益，绝无未来函数；<br>
+              ④ <strong>自迭代微调</strong>：根据客观胜率与大盘周期，系统自动自适应微调 RSRS 买入标准分阈值与风控参数，杜绝死脑筋与过拟合！
+            </p>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="checkbox" id="chkReviewNotify" style="width: 16px; height: 16px;" checked />
+              <label for="chkReviewNotify" style="font-size: 12px; color: var(--text-muted);">复盘完成后推送卡片至钉钉/微信</label>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button id="btnTriggerReview" class="btn btn-primary" onclick="triggerDailyReview()">
+                ⚡ 立即执行收盘复盘 & 自迭代
+              </button>
+              <button class="btn btn-outline" onclick="fetchReviewData()">🔄 刷新</button>
+            </div>
+            <span id="reviewLastTime" style="font-size: 11px; color: var(--text-dim);">最近复盘时间：正在获取...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4大核心复盘指征卡片 -->
+      <div class="review-metrics-grid">
+        <div class="metric-card gold">
+          <div class="metric-label">🏛️ 大盘量化环境定性</div>
+          <div id="metricMarketRegime" class="metric-value" style="color: var(--color-gold);">--</div>
+          <div id="metricMarketPos" class="metric-sub">建议最高仓位上限: --</div>
+        </div>
+        <div class="metric-card bull">
+          <div class="metric-label">🛡️ 自选持仓收盘体检</div>
+          <div id="metricHoldingPnL" class="metric-value">--</div>
+          <div id="metricHoldingValue" class="metric-sub">持仓总市值: --</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">🎯 近10日推荐信号胜率追踪</div>
+          <div id="metricWinRate" class="metric-value" style="color: var(--color-accent);">--</div>
+          <div id="metricSignalCount" class="metric-sub">信号总数: -- | 平均收益: --</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">🧠 策略自我迭代当前参数</div>
+          <div id="metricRsrsThreshold" class="metric-value">--</div>
+          <div id="metricOptStatus" class="metric-sub">移动止盈: -- | 调优状态: --</div>
+        </div>
+      </div>
+
+      <!-- 复盘明细表格行 1: 大盘指数与持仓体检 -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; margin-bottom: 20px;">
+        <!-- 大盘指数诊断 -->
+        <div class="card">
+          <div class="card-title">
+            <span>🏛️ 大盘核心指数收盘量化诊断</span>
+          </div>
+          <div class="table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>指数名称</th>
+                  <th>收盘价</th>
+                  <th>今日涨跌</th>
+                  <th>均线多空结构</th>
+                  <th>量比特征</th>
+                  <th>生命线定性</th>
+                </tr>
+              </thead>
+              <tbody id="marketReviewTbody">
+                <tr><td colspan="6" style="text-align:center; color: var(--text-dim);">加载中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 自选持仓体检 -->
+        <div class="card">
+          <div class="card-title">
+            <span>🛡️ 自选持仓收盘深度体检与防守边际</span>
+          </div>
+          <div class="table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>标的</th>
+                  <th>收盘价</th>
+                  <th>浮动盈亏</th>
+                  <th>止损防守线</th>
+                  <th>保利止盈线</th>
+                  <th>复盘操作建议</th>
+                </tr>
+              </thead>
+              <tbody id="watchlistReviewTbody">
+                <tr><td colspan="6" style="text-align:center; color: var(--text-dim);">暂无持仓或加载中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 复盘明细表格行 2: 信号回访与自迭代记录 -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 20px; margin-bottom: 20px;">
+        <!-- 信号回访 -->
+        <div class="card">
+          <div class="card-title">
+            <span>🎯 近10日推荐信号客观追踪 (无未来函数)</span>
+          </div>
+          <div class="table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>标的代码/名称</th>
+                  <th>发出日期</th>
+                  <th>推荐基准价</th>
+                  <th>最新收盘价</th>
+                  <th>追踪收益率</th>
+                  <th>回访判定</th>
+                </tr>
+              </thead>
+              <tbody id="signalsTrackingTbody">
+                <tr><td colspan="6" style="text-align:center; color: var(--text-dim);">加载信号追踪中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 自我迭代优化记录 -->
+        <div class="card">
+          <div class="card-title">
+            <span>🧠 策略参数自我迭代调优演化记录</span>
+          </div>
+          <div class="table-container">
+            <table class="custom-table">
+              <thead>
+                <tr>
+                  <th>优化时间</th>
+                  <th>当时大盘</th>
+                  <th>当时胜率</th>
+                  <th>参数演进详情</th>
+                  <th>生效状态</th>
+                </tr>
+              </thead>
+              <tbody id="optimizationLogTbody">
+                <tr><td colspan="5" style="text-align:center; color: var(--text-dim);">加载优化日志中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 复盘报告 Markdown 视图 -->
+      <div class="card">
+        <div class="card-title" style="margin-bottom: 12px;">
+          <span>📜 今日收盘全景复盘与风控 Markdown 报告</span>
+          <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" onclick="copyReviewMarkdown()">📋 复制复盘长文</button>
+        </div>
+        <div id="reviewMarkdownView" class="markdown-view">正在读取复盘报告...</div>
+      </div>
+    </section>
+
+    <!-- 5. 策略与推送配置面板 -->
+    <section id="pane-settings" class="tab-pane" style="display: none;">
+      <div class="settings-grid">
+        <!-- 钉钉群机器人配置 -->
+        <div class="card">
+          <div class="card-title">🤖 钉钉机器人推送配置</div>
+          <div class="form-group toggle-switch">
+            <input type="checkbox" id="cfgDingtalkEnabled" style="width: 18px; height: 18px;" />
+            <label for="cfgDingtalkEnabled">启用钉钉交易信号卡片推送</label>
+          </div>
+          <div class="form-group">
+            <label>钉钉 Webhook 地址：</label>
+            <input id="cfgDingtalkWebhook" class="input-text" placeholder="https://oapi.dingtalk.com/robot/send?access_token=xxxx" />
+            <small>在钉钉群设置 -> 自定义机器人 中创建并复制 Webhook</small>
+          </div>
+          <div class="form-group">
+            <label>安全设置加签 Secret (推荐)：</label>
+            <input id="cfgDingtalkSecret" class="input-text" placeholder="SECxxxxxxxxxxxxxxxxxx (若无加签可留空)" />
+          </div>
+        </div>
+
+        <!-- 微信推送配置 -->
+        <div class="card">
+          <div class="card-title">💬 微信手机通知配置</div>
+          <div class="form-group toggle-switch">
+            <input type="checkbox" id="cfgWechatEnabled" style="width: 18px; height: 18px;" />
+            <label for="cfgWechatEnabled">启用微信即时推送</label>
+          </div>
+          <div class="form-group">
+            <label>推送服务提供商：</label>
+            <select id="cfgWechatProvider" class="input-text">
+              <option value="pushplus">PushPlus (推送加 - 关注公众号即推，推荐)</option>
+              <option value="serverchan">Server酱 (方糖服务号推送)</option>
+              <option value="wecom">企业微信群机器人 Webhook</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>微信推送 Token / SendKey：</label>
+            <input id="cfgWechatToken" class="input-text" placeholder="填入 PushPlus Token 或 Server酱 Key" />
+            <small>手机微信即时接收格式化的交易决策卡片，无需打开电脑即可获知买点</small>
+          </div>
+        </div>
+
+        <!-- 策略微调与风控参数 -->
+        <div class="card" style="grid-column: 1 / -1;">
+          <div class="card-title">📊 量化策略与自适应风控参数</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+            <div class="form-group">
+              <label>修正 RSRS 买入标准分阈值：</label>
+              <input id="cfgRsrsBuy" class="input-text" type="number" step="0.05" value="0.7" />
+              <small>默认 0.7。数值越高确定性越强，数值适中可获得更多波段机会</small>
+            </div>
+            <div class="form-group">
+              <label>最高点回撤移动止盈比例 (%)：</label>
+              <input id="cfgTrailingStop" class="input-text" type="number" step="0.5" value="6.0" />
+              <small>当个股冲高后，若从持仓最高点回撤达到该幅度，触发保利移动止盈</small>
+            </div>
+            <div class="form-group">
+              <label>日内正T低吸负偏离阈值 (%)：</label>
+              <input id="cfgT0BiasBuy" class="input-text" type="number" step="0.1" value="-1.5" />
+              <small>默认 -1.5%。分时价格低于均线VWAP达到此幅度提示低吸</small>
+            </div>
+            <div class="form-group">
+              <label>日内倒T高抛正偏离阈值 (%)：</label>
+              <input id="cfgT0BiasSell" class="input-text" type="number" step="0.1" value="2.0" />
+              <small>默认 2.0%。盘中脉冲急拉高于均线VWAP达到此幅度提示先高抛</small>
+            </div>
+            <div class="form-group">
+              <label>选股最小日成交额 (亿元)：</label>
+              <input id="cfgMinTurnover" class="input-text" type="number" step="0.1" value="1.0" />
+              <small>默认 1.0 亿元。过滤缺乏流动性的僵尸标的</small>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 12px; margin-top: 16px;">
+            <button class="btn btn-primary" onclick="saveSettings()">💾 保存所有配置</button>
+            <button id="btnTestNotify" class="btn btn-outline" onclick="sendTestNotification()">🔔 发送测试推送到微信/钉钉</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    A股主板量化波段系统 · 本地安全运行 · 数据直连市场 · 祝投资顺利，稳健复利
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

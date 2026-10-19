@@ -1,0 +1,61 @@
+# ==========================================
+# Python & Bytecode
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# ==========================================
+# Virtual Environments & Packages
+# ==========================================
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# ==========================================
+# IDE & System Files
+# ==========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ==========================================
+# Sensitive Credentials & Environment Files
+# ==========================================
+.env
+.env.local
+.env.*
+!.env.example
+
+# ==========================================
+# Local Runtime Storage & Personal Holdings
+# ==========================================
+# 忽略包含用户私有推送Token、Secret的配置文件
+storage/user_config.json
+
+# 忽略用户真实持仓股数与持仓成本
+storage/watchlist.json
+
+# 忽略本地运行产生的历史记录与日志
+storage/signals_history.json
+storage/review_history.json
+storage/optimization_log.json
+storage/*.log
+storage/*.sqlite
+storage/*.db
+
+# 保留示例模板与目录占位
+!storage/.gitkeep
+!storage/*.example
+# 主板公开股票池缓存（公开数据，保留以加速首次扫描）
+!storage/main_board_stocks.json
