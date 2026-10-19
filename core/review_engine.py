@@ -17,6 +17,7 @@ from config import DATA_DIR, load_config, save_config, SIGNALS_FILE, WATCHLIST_F
 from core.data_fetcher import data_fetcher
 from core.strategy import default_strategy
 from core.risk_manager import risk_manager
+from core.chip_analyzer import chip_analyzer
 
 REVIEW_FILE = DATA_DIR / "review_history.json"
 OPTIMIZATION_FILE = DATA_DIR / "optimization_log.json"
@@ -243,6 +244,21 @@ class ReviewEngine:
                 health_status = "📉 正常轻套"
                 health_action = "关注日内负偏离正T机会"
 
+            # 测算主力持仓成本与用户持仓成本对比
+            main_cost = curr_price
+            cost_vs_main = 0.0
+            control_status = "洗盘蓄势"
+            try:
+                k_df = data_fetcher.get_daily_kline(sym, count=100)
+                if k_df is not None and len(k_df) >= 20:
+                    c_info = chip_analyzer.analyze_chips(k_df, current_price=curr_price)
+                    main_cost = c_info.get("main_cost", curr_price)
+                    control_status = c_info.get("control_status", "洗盘蓄势")
+                    if main_cost > 0 and entry > 0:
+                        cost_vs_main = round((entry - main_cost) / main_cost * 100, 2)
+            except Exception:
+                pass
+
             holdings_list.append({
                 "symbol": sym,
                 "name": name,
@@ -260,6 +276,9 @@ class ReviewEngine:
                 "stop_loss_margin_pct": stop_loss_margin,
                 "trailing_stop_price": trailing_stop_price,
                 "trailing_stop_margin_pct": trailing_stop_margin,
+                "main_cost": main_cost,
+                "cost_vs_main": cost_vs_main,
+                "control_status": control_status,
                 "advice": health_action,
                 "health_status": health_status,
                 "health_action": health_action
@@ -476,7 +495,11 @@ class ReviewEngine:
         for s in watchlist.get("stocks", []):
             if s.get("shares", 0) > 0:
                 pnl_str = f"{s['pnl_pct']:+.2f}% ({s['pnl_dollar']:+.0f}元)"
-                stock_rows.append(f"• **{s['name']}** (现价{s['close_price']}元 | 盈亏: {pnl_str})\n  状态: {s['health_status']} · 建议: {s['health_action']}")
+                main_cost = s.get('main_cost', 0.0)
+                cost_vs_main = s.get('cost_vs_main', 0.0)
+                ctrl_status = s.get('control_status', '未知')
+                main_line = f"\n  🏦 主力成本: {main_cost:.2f}元 (成本差: {cost_vs_main:+.1f}%) | 控盘: {ctrl_status}" if main_cost > 0 else ""
+                stock_rows.append(f"• **{s['name']}** (现价{s['close_price']}元 | 盈亏: {pnl_str}){main_line}\n  状态: {s['health_status']} · 建议: {s['health_action']}")
 
         stocks_summary_text = "\n".join(stock_rows) if stock_rows else "• 当前无底仓持股，资金空仓避险待命中"
 

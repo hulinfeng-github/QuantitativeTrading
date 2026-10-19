@@ -68,6 +68,25 @@ def test_notification():
     res = notification_manager.send_test_message()
     return {"success": True, "details": res}
 
+import time
+from core.chip_analyzer import chip_analyzer
+
+_chip_cache: Dict[str, Dict[str, Any]] = {}
+
+def get_cached_chip_info(sym: str, price: float) -> Dict[str, Any]:
+    now = time.time()
+    if sym in _chip_cache and (now - _chip_cache[sym]["time"]) < 600:
+        return _chip_cache[sym]["data"]
+    try:
+        df = data_fetcher.get_daily_kline(sym, count=100)
+        if df is not None and len(df) >= 20:
+            c_info = chip_analyzer.analyze_chips(df, current_price=price)
+            _chip_cache[sym] = {"time": now, "data": c_info}
+            return c_info
+    except Exception:
+        pass
+    return chip_analyzer._empty_result(price)
+
 @app.get("/api/watchlist")
 def get_watchlist_data():
     items = quant_scheduler.get_watchlist()
@@ -92,6 +111,12 @@ def get_watchlist_data():
             if shares > 0:
                 profit_amount = round((curr_price - entry_price) * shares, 2)
             
+        chip_info = get_cached_chip_info(sym, curr_price)
+        main_cost = chip_info.get("main_cost", curr_price)
+        bias_to_main = chip_info.get("bias_to_main", 0.0)
+        control_status = chip_info.get("control_status", "洗盘震荡")
+        profit_chip_ratio = chip_info.get("profit_chip_ratio", 50.0)
+
         result.append({
             "symbol": sym,
             "name": it.get("name", quote.get("name", sym)),
@@ -104,7 +129,12 @@ def get_watchlist_data():
             "low": quote.get("low", curr_price),
             "turnover": quote.get("turnover", 0.0),
             "profit_pct": profit_pct,
-            "profit_amount": profit_amount
+            "profit_amount": profit_amount,
+            "main_cost": main_cost,
+            "bias_to_main": bias_to_main,
+            "control_status": control_status,
+            "profit_chip_ratio": profit_chip_ratio,
+            "chip_info": chip_info
         })
     return result
 

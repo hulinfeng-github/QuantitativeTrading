@@ -7,6 +7,7 @@ import numpy as np
 from typing import Dict, Any, Optional
 from core.indicators import calculate_all_indicators
 from core.risk_manager import risk_manager
+from core.chip_analyzer import chip_analyzer
 
 class RSRSMomentumStrategy:
     def __init__(self, rsrs_n: int = 18, rsrs_m: int = 600, buy_threshold: float = 0.7, sell_threshold: float = -0.7):
@@ -130,12 +131,35 @@ class RSRSMomentumStrategy:
             score += 10
             reasons.append(f"成交量温和放大(量比 {vol_ratio:.2f})")
 
-        # ----------------- 信号判定与评级 (结合大盘牛熊环境) -----------------
+        # 5. 主力筹码与控盘生命周期评估 (最高额外 15 分，并具备高位派发一票否决权)
+        chip_info = chip_analyzer.analyze_chips(df.iloc[:idx + 1], current_price=close)
+        main_cost = chip_info.get("main_cost", close)
+        bias_to_main = chip_info.get("bias_to_main", 0.0)
+        profit_ratio = chip_info.get("profit_chip_ratio", 50.0)
+        control_status = chip_info.get("control_status", "区间震荡洗盘")
+
+        if control_status == "主力突破起爆":
+            score += 15
+            reasons.append(f"🚀 主力筹码突破起爆：股价刚突破主力建仓成本({main_cost}元，溢价{bias_to_main:+.1f}%)，获利盘超{profit_ratio}%，主力主升意愿极强")
+        elif control_status == "主力吸筹蓄势":
+            score += 10
+            reasons.append(f"🛡️ 主力底仓密集护盘：现价紧贴主力建仓成本({main_cost}元)，70%筹码高度密集，向下安全垫极厚")
+        elif control_status == "主力锁仓主升":
+            score += 5
+            reasons.append(f"📈 主力锁仓主升浪：主力高度控盘(主力成本{main_cost}元)，顺应波段趋势持股")
+        elif control_status == "主力高位派发风险":
+            score -= 25
+            reasons.append(f"⚠️ 严禁追高：现价较主力建仓成本严重超买透支({bias_to_main:+.1f}%)，警惕主力借利好高位派发筹码！")
+
+        # ----------------- 信号判定与评级 (结合大盘牛熊环境与主力筹码) -----------------
         signal_type = "HOLD" # BUY | SELL | HOLD | WATCH
         signal_desc = "震荡观望"
 
-        # 卖出条件：RSRS跌破下限 或 严重破位MA20
-        if rsrs_norm < self.sell_threshold or (close < ma20 and prev['close'] < prev['ma20']):
+        # 卖出条件：RSRS跌破下限 或 严重破位MA20 或 主力高位派发
+        if control_status == "主力高位派发风险":
+            signal_type = "WATCH"
+            signal_desc = "主力高位派发·观望"
+        elif rsrs_norm < self.sell_threshold or (close < ma20 and prev['close'] < prev['ma20']):
             signal_type = "SELL"
             signal_desc = "减仓/清仓信号"
             reasons.append(f"RSRS破位下行({rsrs_norm:.2f} < {self.sell_threshold})或跌破MA20")
@@ -148,13 +172,13 @@ class RSRSMomentumStrategy:
                     reasons.append("大盘处于MA60牛熊线下方，防范系统性假突破风险，暂缓开仓")
                 else:
                     signal_type = "BUY"
-                    signal_desc = "弱市逆势高分买点"
+                    signal_desc = "弱市主力共振突破买点"
             else:
                 signal_type = "BUY"
-                signal_desc = "强力波段买点(五星)"
+                signal_desc = "强力波段买点(主力共振)" if control_status == "主力突破起爆" else "强力波段买点(五星)"
         elif score >= 60 and rsrs_norm >= 0.4 and close > ma20:
             signal_type = "WATCH"
-            signal_desc = "蓄势突破关注(四星)"
+            signal_desc = "主力蓄势突破关注(四星)"
 
         # ----------------- 风控止损止盈点位测算 -----------------
         trade_levels = risk_manager.calculate_trade_levels(entry_price=close, atr=atr)
@@ -167,7 +191,7 @@ class RSRSMomentumStrategy:
             "change_pct": round((close - float(prev['close'])) / float(prev['close']) * 100, 2),
             "signal_type": signal_type,
             "signal_desc": signal_desc,
-            "score": min(score, 100),
+            "score": min(max(score, 0), 100),
             "rsrs_norm": round(rsrs_norm, 3),
             "rsrs_beta": round(rsrs_beta, 3),
             "rsrs_r2": round(rsrs_r2, 3),
@@ -176,6 +200,11 @@ class RSRSMomentumStrategy:
             "ma5": round(ma5, 2),
             "ma20": round(ma20, 2),
             "ma60": round(ma60, 2),
+            "chip_info": chip_info,
+            "main_cost": main_cost,
+            "bias_to_main": bias_to_main,
+            "profit_chip_ratio": profit_ratio,
+            "control_status": control_status,
             "reasons": reasons,
             "trade_levels": trade_levels
         }

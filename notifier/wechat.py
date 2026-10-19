@@ -29,9 +29,16 @@ class WeChatNotifier:
 
         reasons_text = "\n".join([f"• {r}" for r in reasons])
 
+        main_cost = signal.get("main_cost", price)
+        bias_to_main = signal.get("bias_to_main", 0.0)
+        control_status = signal.get("control_status", "主力吸筹")
+        profit_ratio = signal.get("profit_chip_ratio", 0.0)
+
         content = f"""### {badge}：{name} ({code})
 - **量化评分**：{score} 分
 - **当前最新价**：{price:.2f} 元 ({change_pct:+.2f}%)
+- **主力建仓成本**：{main_cost:.2f} 元 (较主力溢价: {bias_to_main:+.1f}%)
+- **主力控盘状态**：{control_status} (获利盘 {profit_ratio}%)
 - **建议止损位**：{levels.get('initial_stop', 0):.2f} 元 (-{levels.get('stop_pct', 0)}%)
 - **目标止盈位**：{levels.get('target_price', 0):.2f} 元 (+{levels.get('reward_pct', 0)}%)
 - **盈亏比**：1 : {levels.get('risk_reward_ratio', 2.5)}

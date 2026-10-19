@@ -22,6 +22,7 @@ from core.indicators import calculate_rsrs, calculate_atr, calculate_macd, calcu
 from core.strategy import default_strategy
 from core.t0_strategy import t0_strategy
 from core.risk_manager import risk_manager
+from core.chip_analyzer import chip_analyzer
 from notifier.manager import notification_manager
 
 class TestAStockQuantSystem(unittest.TestCase):
@@ -257,6 +258,25 @@ class TestAStockQuantSystem(unittest.TestCase):
         self.assertTrue(len(report_md) > 100)
         self.assertIn("大盘大势量化定性", report_md)
         print("  -> 收盘复盘与自迭代全链路验证通过！")
+
+    def test_08_chip_analyzer(self):
+        """测试主力筹码分布与建仓成本分析引擎"""
+        print("\n[测试 8] 验证主力筹码分布与建仓成本分析引擎 (CYQ + Smart Money VWAP)...")
+        res = chip_analyzer.analyze_chips(self.mock_df)
+        self.assertIn("main_cost", res)
+        self.assertIn("profit_chip_ratio", res)
+        self.assertIn("concentration_70", res)
+        self.assertIn("control_status", res)
+        self.assertGreater(res["main_cost"], 0.0)
+        self.assertTrue(0 <= res["profit_chip_ratio"] <= 100)
+        print(f"  -> 主力成本测算正常: 现价={res['current_price']:.2f}元, 主力成本={res['main_cost']:.2f}元, 溢价={res['bias_to_main']:+.1f}%, 控盘状态={res['control_status']}")
+
+        # 验证全量策略研判是否已注入主力成本特征
+        strat_res = default_strategy.analyze("sh600519", "测试标的", self.mock_df)
+        self.assertIsNotNone(strat_res)
+        self.assertIn("main_cost", strat_res)
+        self.assertIn("control_status", strat_res)
+        print(f"  -> 策略引擎主力共振注入正常: 策略评分={strat_res['score']}分, 主力状态={strat_res['control_status']}")
 
 def run_suite():
     print("=" * 65)

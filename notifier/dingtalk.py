@@ -70,17 +70,27 @@ class DingTalkNotifier:
 
         reasons_md = "\n".join([f"- {r}" for r in reasons])
 
+        main_cost = signal.get("main_cost", price)
+        bias_to_main = signal.get("bias_to_main", 0.0)
+        control_status = signal.get("control_status", "主力吸筹")
+        profit_ratio = signal.get("profit_chip_ratio", 0.0)
+
         markdown_text = f"""### {badge}：{name} ({code})
 > **量化综合评分**：`{score}分` | **当前现价**：`{price:.2f}元` ({change_pct:+.2f}%)
 
 ---
+#### 🏦 主力筹码与成本透视
+- **主力建仓成本**：`{main_cost:.2f}元` (较主力溢价: `{bias_to_main:+.1f}%`)
+- **主力控盘状态**：`{control_status}`
+- **全盘获利比例**：`{profit_ratio}%` (抛压轻重评估)
+
 #### 🎯 交易风控参考点位
 - **建议买入区间**：`{price:.2f}元` 附近
 - **初始防守止损**：`{levels.get('initial_stop', 0):.2f}元` (-{levels.get('stop_pct', 0)}%)
 - **波段目标止盈**：`{levels.get('target_price', 0):.2f}元` (+{levels.get('reward_pct', 0)}%)
 - **盈亏比(R:R)**：`1 : {levels.get('risk_reward_ratio', 2.5)}`
 
-#### 📊 策略研判逻辑 (RSRS + 量价共振)
+#### 📊 策略研判逻辑 (RSRS + 主力筹码共振)
 {reasons_md}
 
 > *A股主板量化波段系统（非频繁交易，半自动辅助研判）*

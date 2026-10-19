@@ -118,6 +118,13 @@ function renderScreenerCards(list) {
     const levels = item.trade_levels || {};
 
     const reasonsHtml = (item.reasons || []).map(r => `<li>${r}</li>`).join('');
+    const mainCost = item.main_cost || item.price;
+    const biasToMain = item.bias_to_main !== undefined ? item.bias_to_main : 0;
+    const controlStatus = item.control_status || '吸筹蓄势';
+    let statusBadgeClass = 'badge-neutral';
+    if (controlStatus.includes('起爆')) statusBadgeClass = 'badge-bull';
+    else if (controlStatus.includes('派发')) statusBadgeClass = 'badge-bear';
+    else if (controlStatus.includes('主升')) statusBadgeClass = 'badge-gold';
 
     return `
       <div class="${cardClass}">
@@ -130,6 +137,12 @@ function renderScreenerCards(list) {
             <div class="stock-price ${changeClass}">${item.price.toFixed(2)}</div>
             <div class="stock-change ${changeClass}">${item.change_pct >= 0 ? '+' : ''}${item.change_pct.toFixed(2)}%</div>
           </div>
+        </div>
+
+        <!-- 🏦 主力持仓成本与控盘透视 -->
+        <div style="background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.2); border-radius: 6px; padding: 6px 10px; margin-bottom: 10px; font-size: 11px; display: flex; justify-content: space-between; align-items: center;">
+          <span>🏦 主力成本: <strong style="color:var(--color-gold); font-size:12px;">${mainCost.toFixed(2)}元</strong> <small style="color:${biasToMain >= 0 ? 'var(--color-bull)' : 'var(--color-bear)'};">(${biasToMain >= 0 ? '+' : ''}${biasToMain}%)</small></span>
+          <span class="badge ${statusBadgeClass}" style="font-size:10px;">${controlStatus}</span>
         </div>
 
         <div class="metrics-row">
@@ -208,7 +221,7 @@ async function fetchWatchlist() {
 function renderWatchlistTable(list) {
   const tbody = document.getElementById('watchlistTbody');
   if (!list || list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding: 40px; color: var(--text-dim);">自选股池为空，请在上方输入主板股票代码添加</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 40px; color: var(--text-dim);">自选股池为空，请在上方输入主板股票代码添加</td></tr>`;
     return;
   }
 
@@ -217,6 +230,13 @@ function renderWatchlistTable(list) {
     const profitClass = item.profit_pct >= 0 ? 'bull' : 'bear';
     const profitText = item.entry_price > 0 ? `${item.profit_pct >= 0 ? '+' : ''}${item.profit_pct}%` : '--';
     const profitAmountText = item.shares > 0 && item.entry_price > 0 ? `${item.profit_amount >= 0 ? '+' : ''}${item.profit_amount.toFixed(0)}元` : '--';
+    const mainCost = item.main_cost || item.price;
+    const biasToMain = item.bias_to_main !== undefined ? item.bias_to_main : 0;
+    const controlStatus = item.control_status || '洗盘蓄势';
+    let statusBadgeClass = 'badge-neutral';
+    if (controlStatus.includes('起爆')) statusBadgeClass = 'badge-bull';
+    else if (controlStatus.includes('派发')) statusBadgeClass = 'badge-bear';
+    else if (controlStatus.includes('主升')) statusBadgeClass = 'badge-gold';
 
     return `
       <tr>
@@ -227,6 +247,11 @@ function renderWatchlistTable(list) {
         <td style="font-family:monospace; font-weight:700;" class="${changeClass}">${item.price.toFixed(2)}</td>
         <td style="font-weight:600;" class="${changeClass}">${item.change_pct >= 0 ? '+' : ''}${item.change_pct.toFixed(2)}%</td>
         <td style="font-family:monospace;">${item.entry_price > 0 ? item.entry_price.toFixed(2) + '元' : '未设成本'}</td>
+        <td style="font-family:monospace;">
+          <strong style="color:var(--color-gold); font-size:13px;">${mainCost.toFixed(2)}元</strong>
+          <span style="font-size:11px; display:block; color:${biasToMain >= 0 ? 'var(--color-bull)' : 'var(--color-bear)'};">${biasToMain >= 0 ? '+' : ''}${biasToMain}%</span>
+        </td>
+        <td><span class="badge ${statusBadgeClass}" style="font-size:11px;">${controlStatus}</span></td>
         <td style="font-family:monospace;">${item.shares > 0 ? item.shares + ' 股' : '<span style="color:var(--text-dim);">仅观察</span>'}</td>
         <td style="font-family:monospace; font-weight:700;" class="${profitClass}">
           ${profitText}
@@ -471,6 +496,16 @@ function renderDiagnoseDetails(data) {
 
   const reasonsHtml = (a.reasons || []).map(r => `<li>${r}</li>`).join('');
 
+  const chipInfo = a.chip_info || {};
+  const mainCost = a.main_cost || chipInfo.main_cost || a.price;
+  const biasToMain = a.bias_to_main !== undefined ? a.bias_to_main : (chipInfo.bias_to_main || 0);
+  const controlStatus = a.control_status || chipInfo.control_status || '洗盘蓄势';
+  const profitRatio = a.profit_chip_ratio !== undefined ? a.profit_chip_ratio : (chipInfo.profit_chip_ratio || 50);
+  let statusBadgeClass = 'badge-neutral';
+  if (controlStatus.includes('起爆')) statusBadgeClass = 'badge-bull';
+  else if (controlStatus.includes('派发')) statusBadgeClass = 'badge-bear';
+  else if (controlStatus.includes('主升')) statusBadgeClass = 'badge-gold';
+
   const html = `
     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
       <div>
@@ -483,6 +518,48 @@ function renderDiagnoseDetails(data) {
       <div style="text-align:right;">
         <div style="font-size: 28px; font-weight:800; font-family:monospace;" class="${changeClass}">${a.price.toFixed(2)}</div>
         <div style="font-size: 14px;" class="${changeClass}">${a.change_pct >= 0 ? '+' : ''}${a.change_pct.toFixed(2)}%</div>
+      </div>
+    </div>
+
+    <!-- 🏦 主力筹码成本与庄家控盘深度透视矩阵 -->
+    <div class="card" style="margin-top:16px; background: rgba(14, 165, 233, 0.05); border: 1px solid rgba(14, 165, 233, 0.25); padding:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h4 style="font-size:14px; color:var(--color-gold); display:flex; align-items:center; gap:8px;">
+          <span>🏦 主力筹码与庄家控盘透视矩阵</span>
+          <span class="badge ${statusBadgeClass}">${controlStatus}</span>
+        </h4>
+        <span style="font-size:12px; color:var(--text-muted);">安全边际评分: <strong style="color:var(--color-accent); font-size:14px;">${chipInfo.safety_score || 85}分</strong></span>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:12px;">
+        <div>
+          <span style="font-size:11px; color:var(--text-dim);">主力建仓加权成本</span>
+          <div style="font-size:18px; font-weight:700; color:var(--color-gold); font-family:monospace;">${mainCost.toFixed(2)}元</div>
+          <small style="color:${biasToMain >= 0 ? 'var(--color-bull)' : 'var(--color-bear)'};">${biasToMain >= 0 ? '+' : ''}${biasToMain}% 较主力溢价</small>
+        </div>
+        <div>
+          <span style="font-size:11px; color:var(--text-dim);">筹码最高密集主峰</span>
+          <div style="font-size:18px; font-weight:700; font-family:monospace;">${(chipInfo.chip_peak_price || mainCost).toFixed(2)}元</div>
+          <small style="color:var(--text-dim);">底部密集成交价位</small>
+        </div>
+        <div>
+          <span style="font-size:11px; color:var(--text-dim);">全盘获利比例</span>
+          <div style="font-size:18px; font-weight:700; color:#10b981; font-family:monospace;">${profitRatio}%</div>
+          <small style="color:var(--text-dim);">${profitRatio > 70 ? '🟢 抛压极轻 无深套盘' : '🟡 存在上方解套抛压'}</small>
+        </div>
+        <div>
+          <span style="font-size:11px; color:var(--text-dim);">70% 筹码集中度</span>
+          <div style="font-size:18px; font-weight:700; font-family:monospace;">${chipInfo.concentration_70 || 12}%</div>
+          <small style="color:var(--text-dim);">${(chipInfo.concentration_70 || 12) < 12 ? '🔥 筹码高度单峰锁定' : '筹码相对分散'}</small>
+        </div>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.06); height:6px; border-radius:3px; overflow:hidden; margin-bottom:10px;">
+        <div style="width:${Math.min(Math.max(profitRatio, 0), 100)}%; height:100%; background:linear-gradient(90deg, #10b981, #38bdf8);"></div>
+      </div>
+
+      <div style="font-size:12px; color:var(--text-muted); line-height:1.6; background:rgba(0,0,0,0.25); padding:8px 12px; border-radius:4px;">
+        💡 <strong>主力操盘建议</strong>：${chipInfo.action_advice || '主力建仓成本提供坚实支撑，依托生命线顺势波段交易。'}
       </div>
     </div>
 
@@ -930,7 +1007,7 @@ function renderReviewOverview(review, optLogs) {
   if (wlTbody) {
     const holdings = wl.holdings || [];
     if (holdings.length === 0) {
-      wlTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-dim);">当前自选池中暂未录入持仓股数（可在“自选实时监控”中维护底仓）</td></tr>';
+      wlTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-dim);">当前自选池中暂未录入持仓股数（可在“自选实时监控”中维护底仓）</td></tr>';
     } else {
       let rows = '';
       for (const h of holdings) {
@@ -942,10 +1019,22 @@ function renderReviewOverview(review, optLogs) {
         else if (h.advice.includes('保利') || h.advice.includes('止盈')) adviceBadge = 'badge-gold';
         else if (h.advice.includes('安全')) adviceBadge = 'badge-bull';
 
+        const mainCost = h.main_cost || h.close || 0;
+        const controlStatus = h.control_status || '洗盘蓄势';
+        let statusBadge = 'badge-neutral';
+        if (controlStatus.includes('起爆')) statusBadge = 'badge-bull';
+        else if (controlStatus.includes('派发')) statusBadge = 'badge-bear';
+        else if (controlStatus.includes('主升')) statusBadge = 'badge-gold';
+
         rows += `
           <tr>
             <td><strong>${h.name}</strong> <span style="font-size:11px; color:var(--text-dim);">${h.symbol}</span></td>
             <td><strong>${(h.close || 0).toFixed(2)}</strong></td>
+            <td>
+              <strong style="color:var(--color-gold); font-family:monospace;">${mainCost.toFixed(2)}元</strong>
+              <span style="font-size:11px; display:block; color:${(h.close || 0) >= mainCost ? 'var(--color-bull)' : 'var(--color-bear)'};">${h.cost_vs_main !== undefined ? (h.cost_vs_main >= 0 ? '+' : '') + h.cost_vs_main + '%' : '--'}</span>
+            </td>
+            <td><span class="badge ${statusBadge}">${controlStatus}</span></td>
             <td style="font-weight:700; color:${color};">${sign}${(h.profit_pct || 0).toFixed(2)}%</td>
             <td>${(h.stop_loss_price || 0).toFixed(2)} <span style="font-size:11px; color:var(--text-dim);">(距 ${h.stop_loss_margin_pct || 0}%)</span></td>
             <td>${(h.trailing_stop_price || 0).toFixed(2)} <span style="font-size:11px; color:var(--text-dim);">(距 ${h.trailing_stop_margin_pct || 0}%)</span></td>

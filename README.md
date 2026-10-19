@@ -35,6 +35,11 @@
    - **信号客观回访**：对近10日 BUY 与做T信号进行客观追踪，统计真实胜率与平均收益，绝无未来函数。
    - **自适应自迭代微调**：根据胜率与大盘周期，系统自动自适应微调 RSRS 买入门槛与风控参数，形成完全自学习闭环！
    - **报告自动推送**：自动组装结构化 Markdown 富文本长文卡片直推手机微信与钉钉群。
+9. **主力筹码分布与主力建仓成本透视矩阵 (Smart Money Chip Matrix)**：
+   - **CYQ 筹码换手衰减模型**：模拟 120 日历史筹码在价格网格上的分布与衰减，计算筹码单峰最高密集位与 70%/90% 筹码集中度。
+   - **主力加权建仓成本 (Smart Money VWAP)**：提取过去 60 日内阳线放量吸筹特征日计算主力底仓成本价。
+   - **主力控盘生命周期研判**：实时测算现价较主力成本溢价率与全盘获利比例，定性【主力吸筹蓄势 / 突破起爆主升 / 锁仓拉升 / 高位派发风险】。
+   - **主力共振爆发点加分 & 庄家派发一票否决**：买点结合主力成本过滤虚假突破，高位主力派发阶段一票否决规避高位接盘！
 
 ---
 
@@ -59,6 +64,15 @@
 - 日内枢轴点 (Pivot Points)：
   - 轴心价 $P = (\text{High} + \text{Low} + \text{PrevClose}) / 3$
   - 阻力 $R_1 = 2P - \text{Low}$，支撑 $S_1 = 2P - \text{High}$
+
+### 3. 主力筹码与建仓成本模型 (Smart Money Cost)
+- 历史筹码换手率衰减：
+  $$\text{Chip}_{t} = \text{Chip}_{t-1} \times (1 - \text{Turnover}_t) + \text{Today\_Chip}_t \times \text{Turnover}_t$$
+- 主力加权建仓成本 (Smart VWAP)：
+  $$\text{Cost}_{\text{main}} = \frac{\sum_{i=1}^N (\text{Price}_i \times \text{Volume}_i \times \omega_i)}{\sum_{i=1}^N (\text{Volume}_i \times \omega_i)}$$
+- 相对主力成本溢价率：
+  $$\text{Bias}_{\text{main}} = \frac{\text{Price} - \text{Cost}_{\text{main}}}{\text{Cost}_{\text{main}}} \times 100\%$$
+  *溢价在 $[+2\%, +12\%]$ 且获利盘 $>70\%$ 为主力突破起爆黄金点！*
 
 ---
 
