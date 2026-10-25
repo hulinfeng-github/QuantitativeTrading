@@ -115,12 +115,62 @@ class DingTalkNotifier:
 
         if action == "BUY_T":
             badge = "⚡ 【A股日内正T·低吸买点】"
+            title_action = "正T低吸买点"
         elif action == "SELL_T":
             badge = "🎯 【A股日内倒T·高抛卖点】"
+            title_action = "倒T高抛卖点"
+        elif action == "STOP_T":
+            badge = "🚨 【A股日内做T·跌破防守·紧急止损卖出】"
+            title_action = "跌破防守止损"
+        elif action == "PROFIT_T":
+            badge = "🎉 【A股日内做T·达成目标·冲高止盈平仓】"
+            title_action = "目标冲高止盈"
         else:
             badge = "⏰ 【A股尾盘做T·强制平仓提醒】"
+            title_action = "尾盘平仓提醒"
 
-        text = f"""### {badge} {name} ({code})
+        if action == "STOP_T":
+            entry_p = t0_data.get("entry_price") or price
+            loss_pct = round((price - entry_p) / entry_p * 100, 2) if entry_p > 0 else 0.0
+            text = f"""### {badge} {name} ({code})
+> **分时现价**：`{price:.2f}元` | **做T买入参考价**：`{entry_p:.2f}元` | **防守保护价**：`{stop:.2f}元`
+
+---
+#### ⚠️ 紧急风控止损指令
+- **做T方向**：`{t_type}`
+- **建议执行操作**：**立即在交易软件中卖出等量底仓（{shares} 股）果断止损！**
+- **做T买入参考价**：`{entry_p:.2f} 元`
+- **原防守保护价**：`{stop:.2f} 元`
+- **当前击穿价格**：`{price:.2f} 元` (幅度: `{loss_pct:+.2f}%`)
+- **风控纪律**：**跌破防守线说明日内呈单边破位下跌，严禁逆势盲目补仓！今日系统已冻结该标的正T买入！**
+
+#### 💡 触发止损研判详情
+{reasons_md}
+
+> 🚨 *量化铁律：做T必须带防守止损！宁可错砍微损，绝不可将做T演变为深度套牢！*
+"""
+        elif action == "PROFIT_T":
+            entry_p = t0_data.get("entry_price") or price
+            gain_pct = round((price - entry_p) / entry_p * 100, 2) if entry_p > 0 else spread
+            text = f"""### {badge} {name} ({code})
+> **分时现价**：`{price:.2f}元` | **均价线(VWAP)**：`{vwap:.2f}元` | **差价收益**：`+{gain_pct}%`
+
+---
+#### 🎯 冲高对冲止盈平仓指令
+- **做T方向**：`{t_type}`
+- **建议执行操作**：**立即按现价卖出等量底仓（{shares} 股）锁定日内差价收益！**
+- **做T入场参考**：`{entry_p:.2f} 元`
+- **目标预期价位**：`{target:.2f} 元`
+- **当前触达价格**：`{price:.2f} 元`
+- **锁定差价收益**：`+{gain_pct}%`
+
+#### 💡 研判依据与纪律
+{reasons_md}
+
+> 🎯 *锁定收益：已冲高达到日内对冲平仓目标位，请及时平仓对冲，严格保持总持股数不变！*
+"""
+        else:
+            text = f"""### {badge} {name} ({code})
 > **分时现价**：`{price:.2f}元` | **均价线(VWAP)**：`{vwap:.2f}元` | **偏离度**：`{bias:+.2f}%`
 
 ---
@@ -129,7 +179,7 @@ class DingTalkNotifier:
 - **建议操作股数**：`{shares} 股` (利用已有底仓对冲)
 - **建议执行价格**：`{price:.2f} 元` 附近
 - **预期对冲平仓价**：`{target:.2f} 元` (预期日内价差: `+{spread}%`)
-- **防守保护价**：`{stop:.2f} 元`
+- **防守保护价**：`{stop:.2f} 元` (⚠️ 跌破此价将立即推送紧急止损，严禁逆势加仓)
 
 #### 🧭 日内枢轴点位 (Pivot Points)
 - 压力位 R1/R2: `{pivots.get('r1')}元 / {pivots.get('r2')}元`
@@ -140,7 +190,7 @@ class DingTalkNotifier:
 
 > ⚠️ *重要提示：A股执行T+1，请务必于当日14:50前完成等量对冲平仓，严格保持总持股数量不变！*
 """
-        return self.send_markdown(title=f"【日内做T】{name} 触发{action}", text=text)
+        return self.send_markdown(title=f"【日内做T】{name} {title_action}", text=text)
 
     def send_t0_close_reminder(self, holdings: List[Dict[str, Any]]) -> bool:
         """发送 A股 14:45 尾盘做T强制平仓与对冲核对提醒卡片"""

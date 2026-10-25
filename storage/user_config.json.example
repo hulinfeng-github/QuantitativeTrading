@@ -24,6 +24,8 @@
   "t0_monitor_enabled": true,
   "t0_bias_buy": -1.5,
   "t0_bias_sell": 2.0,
+  "t0_stop_loss_pct": 1.5,
+  "t0_take_profit_pct": 1.5,
   "web_port": 8088,
   "web_host": "127.0.0.1"
 }

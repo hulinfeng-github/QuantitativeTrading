@@ -84,23 +84,68 @@ class WeChatNotifier:
         shares = t0_data.get("suggested_shares", 100)
         target = t0_data.get("target_price", 0.0)
         spread = t0_data.get("expected_spread_pct", 0.0)
+        stop = t0_data.get("stop_price", 0.0)
         reasons_text = "\n".join([f"• {r}" for r in t0_data.get("reasons", [])])
 
         if action == "BUY_T":
             badge = "⚡ 【A股日内正T·低吸买点】"
+            title_action = "正T低吸买点"
         elif action == "SELL_T":
             badge = "🎯 【A股日内倒T·高抛卖点】"
+            title_action = "倒T高抛卖点"
+        elif action == "STOP_T":
+            badge = "🚨 【A股日内做T·跌破防守·紧急止损卖出】"
+            title_action = "跌破防守止损"
+        elif action == "PROFIT_T":
+            badge = "🎉 【A股日内做T·达成目标·冲高止盈平仓】"
+            title_action = "冲高止盈平仓"
         else:
             badge = "⏰ 【A股尾盘做T·强制平仓提醒】"
+            title_action = "尾盘平仓提醒"
 
-        title = f"【日内做T】{name}({code}) {action} 现价{price:.2f}元"
+        title = f"【日内做T】{name}({code}) {title_action} 现价{price:.2f}元"
 
-        content = f"""### {badge} {name} ({code})
+        if action == "STOP_T":
+            entry_p = t0_data.get("entry_price") or price
+            loss_pct = round((price - entry_p) / entry_p * 100, 2) if entry_p > 0 else 0.0
+            content = f"""### {badge} {name} ({code})
+- **分时现价**：{price:.2f} 元 (破位幅度: {loss_pct:+.2f}%)
+- **做T买入参考**：{entry_p:.2f} 元
+- **原防守保护价**：{stop:.2f} 元
+- **建议操作**：**立即在交易软件中卖出等量底仓（{shares} 股）果断止损！**
+- **做T方向**：{t_type}
+
+#### 触发止损详情：
+{reasons_text}
+
+---
+*警告：跌破防守线说明日内呈单边破位下跌，严禁逆势盲目补仓！今日系统已冻结该标的正T买入！*
+"""
+        elif action == "PROFIT_T":
+            entry_p = t0_data.get("entry_price") or price
+            gain_pct = round((price - entry_p) / entry_p * 100, 2) if entry_p > 0 else spread
+            content = f"""### {badge} {name} ({code})
+- **分时现价**：{price:.2f} 元 (预期收益: +{gain_pct}%)
+- **做T入场参考**：{entry_p:.2f} 元
+- **目标预期价位**：{target:.2f} 元
+- **建议操作**：**立即按现价卖出等量底仓（{shares} 股）锁定收益！**
+- **做T方向**：{t_type}
+
+#### 冲高止盈详情：
+{reasons_text}
+
+---
+*提示：已达到日内对冲平仓目标位，请及时平仓对冲，保持总持股数不变！*
+"""
+        else:
+            content = f"""### {badge} {name} ({code})
 - **分时现价**：{price:.2f} 元
 - **分时均价(VWAP)**：{vwap:.2f} 元 (偏离: {bias:+.2f}%)
 - **操作方向**：{t_type}
 - **建议做T股数**：{shares} 股 (利用已有底仓对冲)
-- **目标对冲平仓价**：{target:.2f} 元 (预期做T差价: +{spread}%)
+- **建议执行价格**：{price:.2f} 元 附近
+- **目标对冲平仓价**：{target:.2f} 元 (预期差价: +{spread}%)
+- **防守保护价**：{stop:.2f} 元 (跌破将立即推送紧急止损)
 
 #### 研判理由与纪律：
 {reasons_text}

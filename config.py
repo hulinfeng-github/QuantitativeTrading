@@ -10,6 +10,7 @@ DATA_DIR = BASE_DIR / "storage"
 CONFIG_FILE = DATA_DIR / "user_config.json"
 WATCHLIST_FILE = DATA_DIR / "watchlist.json"
 SIGNALS_FILE = DATA_DIR / "signals_history.json"
+T0_TRADES_FILE = DATA_DIR / "t0_trades.json"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -49,6 +50,9 @@ DEFAULT_CONFIG = {
     "t0_monitor_enabled": True,       # 是否开启持仓股日内做T监控
     "t0_bias_buy": -1.5,              # 正T低吸均线负偏离阈值 (%)
     "t0_bias_sell": 2.0,              # 倒T高抛均线正偏离阈值 (%)
+    "t0_stop_loss_pct": 1.5,          # 做T防守保护止损比例 (默认1.5%)
+    "t0_take_profit_pct": 1.5,        # 做T对冲目标止盈比例 (默认1.5%)
+    "t0_max_trades_per_day": 1,       # 单只标的每日做T最大次数 (防频繁开仓)
     
     # Web 服务端口
     "web_port": 8088,

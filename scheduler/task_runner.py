@@ -146,13 +146,33 @@ class QuantScheduler:
                     )
                     if t0_res:
                         action = t0_res.get("t_action")
-                        # 仅在14:15前允许触发新的买/卖做T开仓；14:35后允许触发平仓提醒
+                        # 1. 仅在14:15前允许触发新的买/卖做T开仓，且开仓成功后落盘跟踪
                         if action in ["BUY_T", "SELL_T"] and curr_hm <= "14:15":
-                            print(f"-> [日内做T触发] {name}: {t0_res.get('t_type')} 现价{t0_res.get('price')} 偏离{t0_res.get('bias')}%")
-                            notification_manager.send_t0_signal(t0_res)
+                            print(f"-> [日内做T触发开仓] {name}: {t0_res.get('t_type')} 现价{t0_res.get('price')} 偏离{t0_res.get('bias')}%")
+                            res_dict = notification_manager.send_t0_signal(t0_res)
+                            if not res_dict.get("skipped"):
+                                t0_strategy.record_trade_open(t0_res)
+                        # 2. 触发止损(跌破防守价)或冲高止盈平仓预警，高优先级强制推送
+                        elif action in ["STOP_T", "PROFIT_T"]:
+                            print(f"-> [日内做T关键风控触发] {name}: {t0_res.get('t_type')} 现价{t0_res.get('price')}")
+                            notification_manager.send_t0_signal(t0_res, force=True)
+                            reasons = t0_res.get("reasons", [])
+                            t0_strategy.record_trade_close(
+                                symbol=sym,
+                                action=action,
+                                price=t0_res.get("price", 0.0),
+                                reason=reasons[0] if reasons else action
+                            )
+                        # 3. 14:35-14:55 尾盘强制平仓对冲
                         elif action == "CLOSE_T":
                             print(f"-> [日内做T尾盘平仓] {name}: 现价{t0_res.get('price')}")
                             notification_manager.send_t0_signal(t0_res)
+                            t0_strategy.record_trade_close(
+                                symbol=sym,
+                                action=action,
+                                price=t0_res.get("price", 0.0),
+                                reason="尾盘强制对冲平仓"
+                            )
 
     def scan_main_board_market(self, max_stocks: int = 300, auto_notify: bool = False) -> List[Dict[str, Any]]:
         """

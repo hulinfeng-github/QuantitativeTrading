@@ -315,6 +315,21 @@ body {
   color: #f59e0b;
   border: 1px solid rgba(245, 158, 11, 0.3);
 }
+.badge-danger {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  font-weight: 700;
+}
+.badge-sell {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.card-danger {
+  border-color: rgba(239, 68, 68, 0.7) !important;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.18) !important;
+}
 
 .metrics-row {
   display: flex;

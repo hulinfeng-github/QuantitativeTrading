@@ -151,7 +151,80 @@ class TestAStockQuantSystem(unittest.TestCase):
         self.assertIn("pivots", t0_res)
         self.assertEqual(t0_res["suggested_shares"], 400) # 底仓1000股推荐做T 400股
         self.assertEqual(t0_res["t_action"], "BUY_T")
-        print(f"  -> 日内做T引擎研判正常: 当前偏离={t0_res['bias']:.2f}%, 动作={t0_res['t_action']}, 建议股数={t0_res['suggested_shares']}")
+        stop_price = t0_res["stop_price"]
+        target_price = t0_res["target_price"]
+        print(f"  -> 日内做T引擎研判正常: 当前偏离={t0_res['bias']:.2f}%, 动作={t0_res['t_action']}, 建议买入价={t0_res['price']}, 防守价={stop_price}, 目标价={target_price}")
+
+        # 模拟执行买入并录入跟踪持仓
+        t0_strategy.record_trade_open(t0_res)
+        self.assertTrue(t0_strategy.tracker.is_open_today("sh600519"))
+
+        # 验证持仓期间：禁止重复触发 BUY_T（杜绝单边下跌盲目补仓）
+        in_pos_res = t0_strategy.analyze_t0(
+            symbol="sh600519",
+            name="贵州茅台",
+            minute_df=m_df,
+            quote=mock_quote,
+            holding_shares=1000,
+            entry_price=99.0
+        )
+        self.assertEqual(in_pos_res["t_action"], "IN_POSITION", "持仓期间应维持IN_POSITION，禁止重复推送BUY_T买点")
+        print("  -> 持仓期间防重复开仓验证通过: 成功阻止单边下跌行情盲目重复推送低吸买入！")
+
+        # 验证跌破防守保护价：必须立即触发 STOP_T 紧急止损卖出预警
+        m_df_breakdown = m_df.copy()
+        breakdown_price = stop_price - 0.20 # 跌破防守价
+        m_df_breakdown.iloc[-1, m_df_breakdown.columns.get_loc('price')] = breakdown_price
+        stop_quote = mock_quote.copy()
+        stop_quote["price"] = breakdown_price
+        stop_res = t0_strategy.analyze_t0(
+            symbol="sh600519",
+            name="贵州茅台",
+            minute_df=m_df_breakdown,
+            quote=stop_quote,
+            holding_shares=1000,
+            entry_price=99.0
+        )
+        self.assertEqual(stop_res["t_action"], "STOP_T", "跌破防守保护价应触发 STOP_T 紧急止损卖出")
+        print(f"  -> 跌破防守保护价止损机制验证通过: 现价={breakdown_price} < 防守价={stop_price}, 成功触发动作={stop_res['t_action']}")
+
+        # 模拟止损执行并平仓
+        t0_strategy.record_trade_close("sh600519", "STOP_T", price=breakdown_price, reason="跌破防守保护价")
+        self.assertTrue(t0_strategy.tracker.is_stopped_today("sh600519"))
+
+        # 验证止损后：当天全天冻结该标的正T买入（解决用户反馈的跌破防守后仍在推送低点买入的严重问题）
+        after_stop_res = t0_strategy.analyze_t0(
+            symbol="sh600519",
+            name="贵州茅台",
+            minute_df=m_df_breakdown,
+            quote=stop_quote,
+            holding_shares=1000,
+            entry_price=99.0
+        )
+        self.assertEqual(after_stop_res["t_action"], "STOPPED_WATCH", "止损后应处于STOPPED_WATCH，严禁再次触发BUY_T")
+        print("  -> 止损后全天禁开正T验证通过: 标的被止损后已成功冻结BUY_T，坚决避免逆势接飞刀！")
+
+        # 验证冲高止盈触发机制
+        t0_strategy.reset_trade("sh600519")
+        t0_strategy.record_trade_open(t0_res)
+        m_df_profit = m_df.copy()
+        profit_price = target_price + 0.20 # 触达目标价
+        m_df_profit.iloc[-1, m_df_profit.columns.get_loc('price')] = profit_price
+        profit_quote = mock_quote.copy()
+        profit_quote["price"] = profit_price
+        profit_res = t0_strategy.analyze_t0(
+            symbol="sh600519",
+            name="贵州茅台",
+            minute_df=m_df_profit,
+            quote=profit_quote,
+            holding_shares=1000,
+            entry_price=99.0
+        )
+        self.assertEqual(profit_res["t_action"], "PROFIT_T", "达到目标价位应触发 PROFIT_T 冲高止盈平仓")
+        print(f"  -> 冲高止盈机制验证通过: 现价={profit_price} >= 目标价={target_price}, 触发动作={profit_res['t_action']}")
+
+        # 清理测试状态
+        t0_strategy.reset_trade("sh600519")
 
         # 验证尾盘平仓窗口（如 14:40）严禁新开买单，并强制触发 CLOSE_T 平仓提醒
         m_df_late = m_df.copy()

@@ -342,6 +342,11 @@ function renderT0Cards(list) {
   container.innerHTML = list.map(item => {
     const isBuyT = item.t_action === 'BUY_T';
     const isSellT = item.t_action === 'SELL_T';
+    const isStopT = item.t_action === 'STOP_T';
+    const isProfitT = item.t_action === 'PROFIT_T';
+    const isInPos = item.t_action === 'IN_POSITION';
+    const isStoppedWatch = item.t_action === 'STOPPED_WATCH';
+    const isCloseT = item.t_action === 'CLOSE_T';
     
     let cardClass = 'stock-card';
     let badgeClass = 'badge-tag badge-watch';
@@ -355,6 +360,26 @@ function renderT0Cards(list) {
       cardClass = 'stock-card';
       badgeClass = 'badge-tag badge-watch';
       badgeText = '🎯 倒T高抛点 (冲高先卖)';
+    } else if (isStopT) {
+      cardClass = 'stock-card card-danger';
+      badgeClass = 'badge-tag badge-danger';
+      badgeText = '🚨 跌破防守止损 (紧急卖出)';
+    } else if (isProfitT) {
+      cardClass = 'stock-card card-buy';
+      badgeClass = 'badge-tag badge-buy';
+      badgeText = '🎉 冲高达到目标 (对冲止盈)';
+    } else if (isInPos) {
+      cardClass = 'stock-card';
+      badgeClass = 'badge-tag badge-watch';
+      badgeText = '⏳ 做T持仓监控中';
+    } else if (isStoppedWatch) {
+      cardClass = 'stock-card';
+      badgeClass = 'badge-tag badge-sell';
+      badgeText = '🛡️ 今日已止损 (观望避险)';
+    } else if (isCloseT) {
+      cardClass = 'stock-card card-danger';
+      badgeClass = 'badge-tag badge-danger';
+      badgeText = '⏰ 尾盘强制平仓';
     }
 
     const biasColor = item.bias >= 0 ? '#ef4444' : '#10b981';
@@ -396,15 +421,19 @@ function renderT0Cards(list) {
           </div>
         </div>
 
-        <!-- 枢轴阻力与支撑 -->
+        <!-- 枢轴阻力、支撑与风控点位 -->
         <div class="trade-levels-box" style="display:flex; flex-direction:column; gap:6px;">
           <div style="display:flex; justify-content:space-between;">
             <span style="color:var(--text-dim);">日内压力 R1: <strong>${pivots.r1 || 0}元</strong></span>
             <span style="color:var(--text-dim);">日内支撑 S1: <strong>${pivots.s1 || 0}元</strong></span>
           </div>
           <div style="display:flex; justify-content:space-between; font-weight:700;">
-            <span style="color:#10b981;">对冲目标价: ${item.target_price || 0}元</span>
-            <span style="color:#f59e0b;">预期差价: +${item.expected_spread_pct || 0}%</span>
+            <span style="color:#10b981;">目标平仓价: ${item.target_price || 0}元</span>
+            <span style="color:#ef4444;">防守保护价: ${item.stop_price || 0}元</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim);">
+            <span>预期价差: <strong>+${item.expected_spread_pct || 0}%</strong></span>
+            <span>${isInPos ? '⚠️ 严禁中途追高/加仓' : (isStoppedWatch ? '🛑 破位已冻结买入' : 'A股T+1等量对冲')}</span>
           </div>
         </div>
 
@@ -413,11 +442,32 @@ function renderT0Cards(list) {
         </ul>
 
         <div style="display: flex; gap: 8px; margin-top: auto; padding-top: 8px;">
-          <button class="btn btn-outline" style="flex:1; padding: 6px;" onclick="quickDiagnose('${item.symbol}')">查看日线K线与RSRS</button>
+          <button class="btn btn-outline" style="flex:1; padding: 6px;" onclick="quickDiagnose('${item.symbol}')">查看日K与RSRS</button>
+          ${(isInPos || isStoppedWatch || isStopT) ? `
+            <button class="btn btn-outline" style="padding: 6px 12px; color:#f59e0b; border-color:#f59e0b;" onclick="resetT0State('${item.symbol}')" title="重置今日做T持仓状态">重置做T状态</button>
+          ` : ''}
         </div>
       </div>
     `;
   }).join('');
+}
+
+async function resetT0State(symbol) {
+  if (!confirm(`确定要重置 ${symbol} 的今日做T持仓状态吗？重置后系统将重新开始检测做T信号。`)) return;
+  try {
+    const res = await fetch('/api/t0/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('已成功重置做T状态');
+      fetchT0Monitor();
+    }
+  } catch (e) {
+    showToast('重置做T状态失败: ' + e.message, 'error');
+  }
 }
 
 async function addStockToWatch(symbol, price) {

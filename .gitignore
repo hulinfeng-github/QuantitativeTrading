@@ -50,6 +50,8 @@ storage/watchlist.json
 storage/signals_history.json
 storage/review_history.json
 storage/optimization_log.json
+storage/t0_state.json
+storage/t0_trades.json
 storage/*.log
 storage/*.sqlite
 storage/*.db

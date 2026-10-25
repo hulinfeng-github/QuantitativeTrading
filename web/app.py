@@ -222,6 +222,21 @@ def get_t0_monitor():
             
     return results
 
+@app.get("/api/t0/positions")
+def get_t0_positions():
+    """获取今日所有日内做T持仓状态"""
+    return t0_strategy.tracker.get_all_today_positions()
+
+@app.post("/api/t0/reset")
+def reset_t0_position(data: Dict[str, str]):
+    """手动重置某只标的的做T状态"""
+    sym = data.get("symbol")
+    if not sym:
+        raise HTTPException(status_code=400, detail="缺少 symbol")
+    formatted_sym = data_fetcher.format_symbol(sym)
+    res = t0_strategy.reset_trade(formatted_sym)
+    return {"success": True, "reset": res, "symbol": formatted_sym}
+
 @app.get("/api/stock/minute")
 def get_stock_minute(symbol: str):
     """获取单只股票今日分时与均价序列"""
